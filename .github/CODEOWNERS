@@ -1,0 +1,29 @@
+# 後面的規則優先。審核規則見 CONTRIBUTING.md 第 3 節。
+
+# 預設：PM
+*                                              @OogaryoO
+
+# 主力開發：蒐證核心
+/src/ForensiKit/Public/                        @YuChenKUO
+
+# PM 的開發範圍
+/src/ForensiKit/ForensiKit.psd1                @OogaryoO
+/src/ForensiKit/ForensiKit.psm1                @OogaryoO
+/src/ForensiKit/Private/                       @OogaryoO
+/src/ForensiKit/config/                        @OogaryoO
+/src/ForensiKit/Public/*Preservation*.ps1      @OogaryoO
+/gui/                                          @OogaryoO
+
+# QA
+/tests/                                        @wangLJ1015
+/scripts/vm/                                   @wangLJ1015
+/docs/TEST_PLAN.md                             @wangLJ1015
+/docs/VM_SETUP.md                              @wangLJ1015
+/docs/TEST_REPORT.md                           @wangLJ1015
+
+# 協作規則與契約：只有 PM
+/AGENTS.md                                     @OogaryoO
+/CLAUDE.md                                     @OogaryoO
+/CONTRIBUTING.md                               @OogaryoO
+/docs/ARCHITECTURE.md                          @OogaryoO
+/.github/                                      @OogaryoO

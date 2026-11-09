@@ -1,0 +1,22 @@
+# 蒐證輸出與測試產物（可能含個資，絕不 commit）
+output/
+tests/e2e/run/
+FK_*/
+*.evtx
+*.fkpkg
+*.zip
+*.pf
+
+# Pester / 分析輸出
+testResults.xml
+coverage.xml
+
+# 編輯器與系統檔
+.vs/
+.vscode/
+*.swp
+Thumbs.db
+.DS_Store
+
+# 個人設定（AI agent 的本機設定不要互相覆蓋）
+.claude/settings.local.json
