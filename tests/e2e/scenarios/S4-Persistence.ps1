@@ -82,7 +82,7 @@ Set-Content -LiteralPath $CmdPath -Value $cmdBody -Encoding ASCII
 Add-FKScenarioStep -Context $ctx -Message ("建立無害批次檔 {0}" -f $CmdPath)
 
 # ---- 2. 排程工作（每分鐘） → Security 4698、TaskScheduler 106 ----
-cmd.exe /c "schtasks /create /tn $TaskName /tr `"$CmdPath`" /sc minute /mo 1 /ru SYSTEM /f" 2>&1 | Out-Null
+$null = Invoke-FKTool -FilePath 'schtasks.exe' -Arguments @('/create', '/tn', $TaskName, '/tr', $CmdPath, '/sc', 'minute', '/mo', '1', '/ru', 'SYSTEM', '/f')
 Add-FKScenarioStep -Context $ctx -Message ("schtasks /create {0}（每分鐘）（預期 4698／TaskScheduler 106）" -f $TaskName)
 
 # ---- 3. HKCU Run 自啟機碼 → Sysmon 13 ----

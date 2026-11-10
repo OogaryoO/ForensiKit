@@ -41,9 +41,9 @@ Assert-FKTestVM
 $ctx = Start-FKScenario -Scenario 'S5' -Title '偵察與外連'
 
 # ---- 偵察指令（各自是一個新程序 → Sysmon 1） ----
-cmd.exe /c 'whoami /all'   2>&1 | Out-Null
-cmd.exe /c 'net user'      2>&1 | Out-Null
-cmd.exe /c 'ipconfig /all' 2>&1 | Out-Null
+$null = Invoke-FKTool -FilePath 'whoami.exe'  -Arguments @('/all')
+$null = Invoke-FKTool -FilePath 'net.exe'     -Arguments @('user')
+$null = Invoke-FKTool -FilePath 'ipconfig.exe' -Arguments @('/all')
 Add-FKScenarioStep -Context $ctx -Message 'whoami /all、net user、ipconfig /all（預期多筆 Sysmon 1）'
 
 # ---- DNS 查詢 → Sysmon 22；寫入 DNS 快取 ----

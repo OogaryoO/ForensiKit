@@ -63,7 +63,7 @@ if (-not $hasVault) {
 }
 
 if ($PSCmdlet.ShouldProcess('Security 事件記錄', 'wevtutil cl（清空）')) {
-    cmd.exe /c 'wevtutil cl Security' 2>&1 | Out-Null
+    $null = Invoke-FKTool -FilePath 'wevtutil.exe' -Arguments @('cl', 'Security')
     Add-FKScenarioStep -Context $ctx -Message 'wevtutil cl Security（預期 Security 1102；vault 仍保有 S1–S4 事件 → AC5）'
     $null = Stop-FKScenario -Context $ctx -Note '已清除 Security log；請從 evtx/vault/ 驗證可取回，再以快照還原 VM。'
     Write-FKScenarioLine 'S6 完成。' -Color Green

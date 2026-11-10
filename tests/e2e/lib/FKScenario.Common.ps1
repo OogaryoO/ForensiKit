@@ -41,6 +41,36 @@ function Get-FKUtcTimestamp {
     return $Time.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [Globalization.CultureInfo]::InvariantCulture)
 }
 
+function Invoke-FKTool {
+    <#
+    .SYNOPSIS
+        直接呼叫外部工具（net、schtasks、wevtutil…），忽略輸出，並避免 native stderr 中斷流程。
+    .DESCRIPTION
+        由 PowerShell 直接傳遞參數陣列（不經 cmd.exe，免去巢狀引號問題）。某些情境（如暴力破解）
+        預期工具會回傳非 0 並寫入 stderr（例如 net 的「系統發生 1326 錯誤」）；為避免在
+        $ErrorActionPreference='Stop' 下被當成終止錯誤，這裡在呼叫期間暫時改為 'Continue' 並吞掉輸出。
+        回傳工具的 exit code，呼叫端可自行判斷。
+    .OUTPUTS
+        [int] exit code
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = '僅轉呼叫外部工具，狀態改變由情境腳本語意決定')]
+    [CmdletBinding()]
+    [OutputType([int])]
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$Arguments = @()
+    )
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $FilePath @Arguments 2>&1 | Out-Null
+        return $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $old
+    }
+}
+
 function Test-FKElevated {
     <#
     .SYNOPSIS
@@ -115,7 +145,7 @@ function New-FKScenarioPassword {
         'ABCDEFGHJKLMNPQRSTUVWXYZ',
         'abcdefghijkmnpqrstuvwxyz',
         '23456789',
-        '!@#%^*-_=+'
+        '@#*-_=+'
     )
     $all   = ($sets -join '').ToCharArray()
     $bytes = New-Object 'byte[]' ($Length)

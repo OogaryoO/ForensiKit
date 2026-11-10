@@ -48,7 +48,7 @@ function Remove-FKVictim {
     [CmdletBinding()]
     param()
     if (Get-LocalUser -Name $UserName -ErrorAction SilentlyContinue) {
-        cmd.exe /c "net use $Share /delete /y" 2>&1 | Out-Null
+        $null = Invoke-FKTool -FilePath 'net.exe' -Arguments @('use', $Share, '/delete', '/y')
         Remove-LocalUser -Name $UserName -ErrorAction SilentlyContinue
         return $true
     }
@@ -78,14 +78,14 @@ Add-FKScenarioStep -Context $ctx -Message ("建立本機帳號 {0}" -f $UserName
 try {
     # ---- 多次錯誤密碼 → Security 4625 ----
     for ($i = 1; $i -le $FailedAttempts; $i++) {
-        $wrong = "wrong-$i-" + (New-FKScenarioPassword -Length 8)
-        cmd.exe /c "net use $Share /user:$UserName `"$wrong`"" 2>&1 | Out-Null
+        $wrong = "Wrong$i" + (New-FKScenarioPassword -Length 8)
+        $null = Invoke-FKTool -FilePath 'net.exe' -Arguments @('use', $Share, $wrong, "/user:$UserName")
     }
     Add-FKScenarioStep -Context $ctx -Message ("以錯誤密碼嘗試 {0} 次（預期 Security 4625 ×{0}）" -f $FailedAttempts)
 
     # ---- 最後一次正確密碼 → Security 4624 (LogonType 3) ----
-    cmd.exe /c "net use $Share /user:$UserName `"$password`"" 2>&1 | Out-Null
-    cmd.exe /c "net use $Share /delete /y" 2>&1 | Out-Null
+    $null = Invoke-FKTool -FilePath 'net.exe' -Arguments @('use', $Share, $password, "/user:$UserName")
+    $null = Invoke-FKTool -FilePath 'net.exe' -Arguments @('use', $Share, '/delete', '/y')
     Add-FKScenarioStep -Context $ctx -Message '以正確密碼成功登入一次（預期 Security 4624，LogonType 3）'
 }
 finally {
