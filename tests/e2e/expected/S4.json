@@ -1,0 +1,23 @@
+[
+  {
+    "channel": "Security",
+    "eventId": 4698,
+    "minCount": 1,
+    "match": "TaskName=fk_updater",
+    "note": "A scheduled task was created"
+  },
+  {
+    "channel": "Microsoft-Windows-TaskScheduler/Operational",
+    "eventId": 106,
+    "minCount": 1,
+    "match": "TaskName=fk_updater",
+    "note": "Task Scheduler registered the fk_updater task"
+  },
+  {
+    "channel": "Microsoft-Windows-Sysmon/Operational",
+    "eventId": 13,
+    "minCount": 1,
+    "match": "TargetObject=fk_updater",
+    "note": "Sysmon registry value set on the HKCU Run key"
+  }
+]
