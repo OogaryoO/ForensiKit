@@ -17,8 +17,9 @@
 |---|---|
 | 虛擬化 | VirtualBox 7（Hyper-V 亦可） |
 | 作業系統 | Windows 11 Enterprise 評估版（90 天免費；Windows 10 亦可） |
-| 資源 | 2 vCPU、4 GB RAM、60 GB 磁碟、NAT 網路 |
+| 資源 | 2 vCPU、4 GB RAM、80 GB 動態配置磁碟（Windows 11 安裝下限為 64 GB）、NAT 網路 |
 | 預裝 | Sysmon（SwiftOnSecurity 設定）、4688 命令列稽核、PowerShell Script Block Logging、Pester 5、PSScriptAnalyzer、Git |
+| 其他設定 | 時區 `Taipei Standard Time`；S1–S4 所需的稽核子類別（含 4698 排程工作）；啟用 TaskScheduler Operational 通道 |
 | 快照 | `clean-baseline`：完成上述設定、尚未安裝 ForensiKit |
 
 建置步驟見 `docs/VM_SETUP.md`（T02 產出）。
