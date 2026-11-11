@@ -43,7 +43,10 @@ $VaultSecurityDir = 'C:\ProgramData\ForensiKit\vault\Security'
 
 if ($Cleanup) {
     Assert-FKTestVM -NoAdmin
-    Write-FKScenarioLine 'S6 清除 Security log 無法還原；請用 VirtualBox 快照 clean-baseline 還原 VM。' -Color Yellow
+    Write-FKScenarioLine 'S6 清除 Security log 無法還原；請把 VM 還原到快照 clean-baseline（見 docs/VM_SETUP.md）：' -Color Yellow
+    Write-FKScenarioLine '    VirtualBox：第 7 節，VBoxManage snapshot FK-Win11 restore clean-baseline' -Color Yellow
+    Write-FKScenarioLine '    Hyper-V   ：第 3B-4 節，Restore-VMCheckpoint -VMName FK-Win11 -Name clean-baseline' -Color Yellow
+    Write-FKScenarioLine '    Azure     ：第 3C-7 節，用磁碟快照 clean-baseline 建立新磁碟並交換 OS 磁碟' -Color Yellow
     return
 }
 

@@ -41,7 +41,8 @@ tests/e2e/
 ```
 
 - **S6** 另有 `-Force`（略過「vault 必須已有 Security 備份」檢查）與標準的 `-Confirm`／`-WhatIf`
-  （`SupportsShouldProcess`，`ConfirmImpact = High`），因為清除 log 無法還原。
+  （`SupportsShouldProcess`，`ConfirmImpact = High`），因為清除 log 無法還原。跑完 S6 一定要把 VM
+  還原到 `clean-baseline`：VirtualBox 是快照、Hyper-V 是檢查點、Azure 是 OS 磁碟快照，做法見 `docs/VM_SETUP.md`。
 - 測試帳號一律以 `fk_` 開頭，密碼在執行時隨機產生、只存在記憶體，**不會**寫入 repo 或主控台。
 
 ## `run/<情境>.time.json`
