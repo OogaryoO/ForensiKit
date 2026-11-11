@@ -4,7 +4,7 @@
 
 ## 1. 安全規則（所有人與所有 AI 必須遵守）
 
-1. **攻擊模擬、保全安裝、蒐證測試只能在 VM 內執行。** 不得在實體電腦、學校或公司的電腦上執行。
+1. **攻擊模擬、保全安裝、蒐證測試只能在 VM 內執行。** 不得在實體電腦、學校或公司的電腦上執行。VM 可以是本機的 VirtualBox／Hyper-V，或自己 Azure 訂用帳戶中的 VM（RDP 只開放給自己的 IP，見 `docs/VM_SETUP.md` 第 3C 節）；不得對 VM 以外的主機或 IP 做任何測試。
 2. 每個攻擊模擬腳本開頭必須檢查 `C:\FK-TEST-VM.marker`，找不到就 `throw` 並結束。這個檔案只由 `scripts/vm/Setup-TestVM.ps1` 在 VM 中建立，**不要在實體電腦上手動建立它**。
 3. 只用 Windows 內建指令產生「看起來像攻擊」的紀錄；不下載、不撰寫真正的惡意程式，也不關閉或繞過防毒。
 4. 測試帳號一律以 `fk_` 開頭，密碼只存在 VM 內，不寫進 repo。
@@ -15,9 +15,9 @@
 
 | 項目 | 規格 |
 |---|---|
-| 虛擬化 | VirtualBox 7（Hyper-V 亦可） |
-| 作業系統 | Windows 11 Enterprise 評估版（90 天免費；Windows 10 亦可） |
-| 資源 | 2 vCPU、4 GB RAM、80 GB 動態配置磁碟（Windows 11 安裝下限為 64 GB）、NAT 網路 |
+| 虛擬化 | VirtualBox 7；主機開著 VBS 時建議 Hyper-V；本機跑不動時可用 Azure for Students 的 VM（選擇方式見 `docs/VM_SETUP.md` 第 0 節） |
+| 作業系統 | Windows 11 Enterprise 評估版（90 天免費；Windows 10 亦可）；Azure 使用 Windows 11 Enterprise 映像 |
+| 資源 | 2 vCPU、4 GB RAM、80 GB 動態配置磁碟（Windows 11 安裝下限為 64 GB；Azure 用預設 127 GiB 標準 SSD）、NAT 網路（Hyper-V 為 Default Switch；Azure 的 RDP 只開放給自己的 IP） |
 | 預裝 | Sysmon（SwiftOnSecurity 設定）、4688 命令列稽核、PowerShell Script Block Logging、Pester 5、PSScriptAnalyzer、Git |
 | 其他設定 | 時區 `Taipei Standard Time`；S1–S4 所需的稽核子類別（含 4698 排程工作）；啟用 TaskScheduler Operational 通道 |
 | 快照 | `clean-baseline`：完成上述設定、尚未安裝 ForensiKit |

@@ -18,7 +18,7 @@
 
     所有必要步驟都通過後，才建立 C:\FK-TEST-VM.marker。攻擊模擬腳本會檢查這個檔案，確認自己在測試 VM 中。
 
-    安全機制：腳本一開始會檢查硬體資訊，確認是在虛擬機器（VirtualBox、Hyper-V、VMware、QEMU/KVM、
+    安全機制：腳本一開始會檢查硬體資訊，確認是在虛擬機器（VirtualBox、Hyper-V、Azure、VMware、QEMU/KVM、
     Parallels、Xen）內執行；偵測不到就拒絕執行，避免在實體電腦上建立標記檔。
 
 .PARAMETER VerifyOnly
@@ -50,7 +50,8 @@
 
 .NOTES
     只能在測試 VM 內執行（docs/TEST_PLAN.md 安全規則第 1、2 條）。
-    需要系統管理員權限與網際網路連線（VirtualBox NAT 即可）。
+    需要系統管理員權限與網際網路連線（VirtualBox NAT、Hyper-V Default Switch 或 Azure VM 的預設網路皆可）。
+    Azure VM 會被辨識為「Azure (Hyper-V)」並記錄在標記檔的 vmPlatform。
     腳本以 -accepteula 安裝 Sysmon，執行即代表你同意 Sysinternals 的授權條款。
     執行紀錄與下載的檔案放在 C:\ProgramData\FK-TestVM\。
 #>
@@ -76,7 +77,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'   # PS 5.1 的 Invoke-WebRequest 顯示進度列會慢很多
 
-$ScriptVersion = '0.1.0'
+$ScriptVersion = '0.2.0'
 $MarkerPath    = 'C:\FK-TEST-VM.marker'
 $WorkDir       = Join-Path -Path $env:ProgramData -ChildPath 'FK-TestVM'
 $TimeZoneId    = 'Taipei Standard Time'
@@ -147,10 +148,35 @@ function Get-VMPlatform {
     }
     foreach ($name in $signatures.Keys) {
         if ($evidence -match $signatures[$name]) {
-            return [pscustomobject]@{ Platform = $name; Evidence = $evidence }
+            $platform = $name
+            if ($name -eq 'Hyper-V' -and (Test-IsAzureVM)) {
+                # Azure 的 VM 也是 Hyper-V；另外標示，測試報告才分得出本機與雲端環境
+                $platform = 'Azure (Hyper-V)'
+            }
+            return [pscustomobject]@{ Platform = $platform; Evidence = $evidence }
         }
     }
     return [pscustomobject]@{ Platform = $null; Evidence = $evidence }
+}
+
+function Test-IsAzureVM {
+    <# Azure VM 的機殼資產標籤固定為下列字串；另以 Azure VM 代理程式服務作為備援判斷。 #>
+    $azureAssetTag = '7783-7084-3265-9085-8269-3286-77'
+    $enclosure = Get-CimInstance -ClassName Win32_SystemEnclosure | Select-Object -First 1
+    if ($null -ne $enclosure -and [string]$enclosure.SMBIOSAssetTag -eq $azureAssetTag) {
+        return $true
+    }
+    return $null -ne (Get-Service -Name 'WindowsAzureGuestAgent' -ErrorAction SilentlyContinue)
+}
+
+function Get-SnapshotHint {
+    param([Parameter(Mandatory = $true)][string]$VMPlatform)
+    switch -Regex ($VMPlatform) {
+        '^Azure'      { return '在 Azure 停止（解除配置）VM 後，替 OS 磁碟建立快照 clean-baseline（見 docs/VM_SETUP.md 第 3C-7 節）。' }
+        '^Hyper-V$'   { return '關機，在 Hyper-V 建立檢查點 clean-baseline（見 docs/VM_SETUP.md 第 3B 節）。' }
+        '^VirtualBox' { return '關機，在 VirtualBox 建立快照 clean-baseline（見 docs/VM_SETUP.md 第 7 節）。' }
+        default       { return '關機，用你的虛擬化軟體建立快照 clean-baseline（見 docs/VM_SETUP.md）。' }
+    }
 }
 
 function Initialize-WorkDir {
@@ -696,7 +722,7 @@ elseif ($allOk) {
     Write-Step '設定完成。接下來：' -Color Green
     Write-Step '  1. 重新開機一次，讓所有設定在新的工作階段生效。'
     Write-Step '  2. 開機後以系統管理員身分再跑一次：.\Setup-TestVM.ps1 -VerifyOnly，確認全部 OK。'
-    Write-Step '  3. 關機，在 VirtualBox 建立快照 clean-baseline（見 docs/VM_SETUP.md）。'
+    Write-Step ('  3. {0}' -f (Get-SnapshotHint -VMPlatform $vm.Platform))
 }
 else {
     Write-Step '有必要步驟未通過。請依上表的訊息處理後重跑本腳本；仍無法解決請把上表貼到 T02 Issue。' -Color Red
