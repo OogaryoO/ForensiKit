@@ -1,0 +1,16 @@
+[
+  {
+    "channel": "Security",
+    "eventId": 4625,
+    "minCount": 5,
+    "match": "TargetUserName=fk_victim",
+    "note": "Failed logon attempts against fk_victim"
+  },
+  {
+    "channel": "Security",
+    "eventId": 4624,
+    "minCount": 1,
+    "match": "TargetUserName=fk_victim;LogonType=3",
+    "note": "Final successful network logon"
+  }
+]

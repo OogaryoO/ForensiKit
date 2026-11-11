@@ -1,0 +1,23 @@
+[
+  {
+    "channel": "Security",
+    "eventId": 4688,
+    "minCount": 1,
+    "match": "NewProcessName=powershell.exe;CommandLine=EncodedCommand",
+    "note": "Process creation with command line showing -EncodedCommand (requires 4688 cmdline auditing)"
+  },
+  {
+    "channel": "Microsoft-Windows-PowerShell/Operational",
+    "eventId": 4104,
+    "minCount": 1,
+    "match": "ScriptBlockText=whoami",
+    "note": "Script block logging captured the decoded command"
+  },
+  {
+    "channel": "Microsoft-Windows-Sysmon/Operational",
+    "eventId": 1,
+    "minCount": 1,
+    "match": "Image=powershell.exe",
+    "note": "Sysmon process-create for powershell.exe"
+  }
+]

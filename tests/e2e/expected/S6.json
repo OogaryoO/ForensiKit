@@ -1,0 +1,9 @@
+[
+  {
+    "channel": "Security",
+    "eventId": 1102,
+    "minCount": 1,
+    "match": "",
+    "note": "The Security audit log was cleared (wevtutil cl Security). AC5 is verified separately by confirming S1-S4 events are still recoverable from evtx/vault/."
+  }
+]
