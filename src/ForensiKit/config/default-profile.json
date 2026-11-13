@@ -1,0 +1,16 @@
+{
+  "channels": [
+    "Security", "System", "Application",
+    "Microsoft-Windows-Sysmon/Operational",
+    "Microsoft-Windows-PowerShell/Operational",
+    "Microsoft-Windows-TaskScheduler/Operational",
+    "Microsoft-Windows-TerminalServices-LocalSessionManager/Operational"
+  ],
+  "defaultLookbackDays": 7,
+  "preservation": {
+    "logMaxSizeMB": { "Security": 512, "default": 128 },
+    "vaultRoot": "C:\\ProgramData\\ForensiKit\\vault",
+    "vaultIntervalMinutes": 60,
+    "vaultMaxTotalMB": 2048
+  }
+}
