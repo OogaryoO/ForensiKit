@@ -52,7 +52,7 @@
 - **完成條件**：`Import-Module ./src/ForensiKit` 不報錯；CI 綠燈。
 
 ### T02 VM 建置（W）
-- 建 VM 指南：Windows 11（或 10）Enterprise 評估版 ISO、VirtualBox、建議 4 GB RAM／60 GB 磁碟、網路設 NAT。
+- 建 VM 指南：Windows 11（或 10）Enterprise 評估版 ISO、VirtualBox（主機開著 VBS 時可改用 Hyper-V，本機跑不動時可用 Azure for Students，見 `docs/VM_SETUP.md` 第 0 節）、建議 4 GB RAM／80 GB 動態配置磁碟（Windows 11 安裝下限為 64 GB）、網路設 NAT。
 - `Setup-TestVM.ps1`：安裝 Sysmon（SwiftOnSecurity 設定）、開啟「程序建立含命令列」稽核（4688）、PowerShell Script Block Logging（4104）、安裝 Pester 5 與 PSScriptAnalyzer、建立 `C:\FK-TEST-VM.marker` 標記檔。
 - 寫明「建好後先做快照 `clean-baseline`」。
 - **完成條件**：三人都依文件建好 VM 並在 T02 Issue 留言確認。
