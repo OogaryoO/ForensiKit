@@ -85,11 +85,32 @@ FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>/
 {"timeUtc":"2026-11-21T02:03:04Z","action":"ExportEventLog","target":"Security","detail":"wevtutil epl ...","status":"OK"}
 ```
 
+- 編碼：UTF-8 **無 BOM**、LF 換行，一行一個 JSON 物件，只附加不覆寫。
+- **「目前證據包」的指定方式**（內部函式，位於 `Private/Open-FKActionLog.ps1`）：
+  ```powershell
+  # Invoke-ForensiKit 建立證據包目錄後
+  Open-FKActionLog -PackageRoot $packageRoot | Out-Null   # 回傳 action_log.jsonl 完整路徑；目錄不存在時 throw
+  try { ...各步驟呼叫 Write-FKAction... }
+  finally { Close-FKActionLog }
+  ```
+  - `Get-FKActionLogPath` 回傳目前路徑，尚未 Open 時為 `$null`。
+  - 尚未 Open 就呼叫 `Write-FKAction`（例如單獨執行 `Export-FKEventLog` 或單元測試）：**不寫檔、不 throw**，只輸出 Verbose 訊息。
+  - 寫檔失敗：輸出 Warning，不中斷流程（第 3 節）。
+  - 單元測試可用 `InModuleScope ForensiKit { Open-FKActionLog -PackageRoot $TestDrive }` 指定證據包。
+  - 會暫時切換 action log 的函式（例如 `Install-FKPreservation` 改寫到 vault 根目錄）結束前必須還原成原本的路徑。
+- `channel` 名稱轉成檔名（`/` → `%4`）一律使用內部函式 `ConvertTo-FKSafeChannelName`；ISO 8601 字串一律使用 `ConvertTo-FKIsoUtc`。
+
 ## 5. Vault（常駐保全的備份位置）
 
-- 路徑：`C:\ProgramData\ForensiKit\vault\<Channel 安全名稱>\<yyyyMMddTHHmmssZ>.evtx`
-- 權限：SYSTEM 完全控制、Administrators 唯讀，其他人無權限。
-- 由排程工作 `\ForensiKit\VaultBackup` 每小時以 SYSTEM 身分執行一次，保留上限由設定檔決定。
+- 路徑：`C:\ProgramData\ForensiKit\vault\<Channel 安全名稱>\<yyyyMMddTHHmmssZ>.evtx`；檔名時間為該次備份的 UTC 時間，可用內部函式 `ConvertFrom-FKVaultFileName` 解析。
+- 權限：SYSTEM 完全控制、Administrators 唯讀，其他人無權限，不繼承上層權限。
+- 由排程工作 `\ForensiKit\VaultBackup` 每 `vaultIntervalMinutes` 分鐘（預設 60）以 SYSTEM 身分執行一次，開機時與安裝完成時也各執行一次。
+- **增量備份**：每個 channel 的第一份備份是整個 channel；之後每份只含「上一份備份時間往前 5 分鐘」之後的事件。因此：
+  - 相鄰兩份備份可能有**重複事件**（重疊 5 分鐘）。`Export-FKEventLog -IncludeVault` 照時段條件分別匯出每一份，不需去重；分析時以 `EventRecordID` 判斷重複。
+  - 要取回某時段的事件，必須掃描該 channel 目錄下的**所有**備份，不能只看最新一份。
+- vault 根目錄另有 `action_log.jsonl`（備份動作紀錄）。列舉備份檔時只取 `<Channel 安全名稱>\*.evtx`。
+- 容量上限：所有 `.evtx` 合計超過 `vaultMaxTotalMB` 時，從最舊的備份開始刪除，但每個 channel **至少保留最新一份**。
+- 安裝目錄 `C:\ProgramData\ForensiKit\`（模組、`bin\`、`preservation.json`）只允許 SYSTEM 與 Administrators 寫入，避免一般使用者竄改 SYSTEM 排程執行的腳本。
 
 ## 6. 設定檔 `config/default-profile.json`
 
@@ -129,6 +150,11 @@ FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>/
 | `Unprotect-FKPackage` | `-Path <string> -Password <SecureString> -Destination <string>` | `{PackageRoot}` | T08 |
 | `Invoke-ForensiKit` | `-CaseId <string> -Operator <string> -StartUtc <datetime> -EndUtc <datetime> -OutputRoot <string> [-Password <SecureString>] [-NoEncrypt]` | `{PackageRoot, PackagePath, ManifestSha256, Results, DurationSec, Status}` | T09 |
 | `Start-ForensiKitGui` | 無 | 無 | T10 |
+
+### 常駐保全回傳物件的子欄位
+- `Install-FKPreservation` 的 `LogSizesApplied`：每個 channel 一筆 `{Channel, PreviousMB, TargetMB, Status}`。只加大不縮小；已達上限時 `Status = 'OK'` 且不變更；channel 不存在時 `Skipped`。
+- `Get-FKPreservationStatus` 的 `LogSizes`：設定中每個 channel 一筆 `{Channel, MaxSizeMB, Exists <bool>}`；`LastRunUtc` 為 `Kind = Utc` 的 `[datetime]`，從未執行時為 `$null`；`VaultSizeMB` 只計算 `.evtx`。
+- `Uninstall-FKPreservation` 不會把 log 上限改回原值（縮小可能使尚未匯出的事件被覆寫）；尚未安裝時回傳 `Skipped`。
 
 `artifact` 的 `-Name` 可用值：`Prefetch`、`ScheduledTasks`、`Services`、`Autoruns`、`Processes`、`NetworkConnections`、`DnsCache`。
 
