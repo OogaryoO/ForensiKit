@@ -4,14 +4,16 @@
         一鍵蒐證：建立證據包、依時段匯出事件記錄、產生 manifest 與監管鏈表單。
 
     .DESCRIPTION
-        T09a 最小端到端版本（TASKS.md T09a）：
+        主流程（TASKS.md T09）：
           1. 檢查參數與管理員權限（不符就 throw，不建立任何檔案）
           2. 在 OutputRoot 下建立 FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>（docs/ARCHITECTURE.md 第 4 節）
           3. 開始 action log（Open-FKActionLog），記錄案號、操作者與時段
-          4. Export-FKEventLog：Security log 的指定時段 → <PackageRoot>\evtx\live\Security.evtx
-          5. New-FKManifest：manifest.json 與 chain_of_custody.txt；之後立刻結束 action log
+          4. Export-FKEventLog -IncludeVault：設定檔（Get-FKConfig）中所有 channel 的指定時段 → <PackageRoot>\evtx\live\，
+             vault 備份中同一時段的事件 → <PackageRoot>\evtx\vault\（尚未安裝常駐保全時 vault 結果為 Skipped）
+          5. Get-FKArtifact：7 種 artifact → <PackageRoot>\artifacts\
+          6. New-FKManifest：manifest.json 與 chain_of_custody.txt；之後立刻結束 action log
         任何步驟 Failed 或 Partial 時整體 Status = 'Partial'，仍會產出 manifest；manifest 本身失敗時 Status = 'Failed'。
-        之後的 T09 會加上其他 channel、vault、artifact（T05）與加密（T08）。
+        Skipped（例如沒裝 Sysmon、沒有 vault）不影響整體狀態。
 
         加密（T08）尚未實作：
           - 指定 -NoEncrypt：不加密，PackagePath = $null。
@@ -114,16 +116,25 @@
     try {
         Write-FKAction -Action 'StartCollection' -Target $packageRoot -Detail ('案號={0}；操作者={1}；時段={2} ～ {3}；電腦={4}' -f $CaseId, $Operator, (ConvertTo-FKIsoUtc -Date $StartUtc), (ConvertTo-FKIsoUtc -Date $EndUtc), $env:COMPUTERNAME) -Status 'OK'
 
-        # T09a：只匯出 Security log（T09 會改成設定中的所有 channel 與 vault）
+        # 單一步驟失敗不中斷，仍要產出 manifest（契約第 3 節、TASKS.md T09）
         try {
-            foreach ($r in @(Export-FKEventLog -StartUtc $StartUtc -EndUtc $EndUtc -Destination (Join-Path $packageRoot 'evtx') -Channels 'Security')) {
+            foreach ($r in @(Export-FKEventLog -StartUtc $StartUtc -EndUtc $EndUtc -Destination (Join-Path $packageRoot 'evtx') -IncludeVault)) {
                 $results.Add($r)
             }
         }
         catch {
-            # 單一步驟失敗不中斷，仍要產出 manifest（契約第 3 節、TASKS.md T09）
-            Write-FKAction -Action 'ExportEventLog' -Target 'Security' -Detail ('Export-FKEventLog 發生錯誤：{0}' -f $_.Exception.Message) -Status 'Failed'
-            $results.Add([pscustomobject]@{ Channel = 'Security'; Source = 'Live'; Path = $null; EventCount = $null; Status = 'Failed' })
+            Write-FKAction -Action 'ExportEventLog' -Target 'evtx' -Detail ('Export-FKEventLog 發生錯誤：{0}' -f $_.Exception.Message) -Status 'Failed'
+            $results.Add([pscustomobject]@{ Channel = '*'; Source = 'Live'; Path = $null; EventCount = $null; Status = 'Failed' })
+        }
+
+        try {
+            foreach ($r in @(Get-FKArtifact -StartUtc $StartUtc -EndUtc $EndUtc -Destination (Join-Path $packageRoot 'artifacts'))) {
+                $results.Add($r)
+            }
+        }
+        catch {
+            Write-FKAction -Action 'CollectArtifact' -Target 'artifacts' -Detail ('Get-FKArtifact 發生錯誤：{0}' -f $_.Exception.Message) -Status 'Failed'
+            $results.Add([pscustomobject]@{ Name = '*'; Path = $null; ItemCount = $null; Status = 'Failed' })
         }
 
         if (-not $NoEncrypt) {
