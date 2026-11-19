@@ -19,6 +19,9 @@
 /scripts/vm/                                   @wangLJ1015
 /docs/TEST_PLAN.md                             @wangLJ1015
 /docs/VM_SETUP.md                              @wangLJ1015
+
+# 開發者隨實作一起寫的測試（*.Impl.Tests.ps1）：由開發者與 PM 負責，不必等 QA 核准
+/tests/unit/*.Impl.Tests.ps1                   @YuChenKUO @OogaryoO
 /docs/TEST_REPORT.md                           @wangLJ1015
 
 # 協作規則與契約：只有 PM
