@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540" font-family="'Microsoft JhengHei', 'Noto Sans TC', 'PingFang TC', sans-serif">
+  <title>ForensiKit TAM / SAM / SOM</title>
+  <rect width="960" height="540" fill="#ffffff"/>
+
+  <!-- 同心圓（示意，非等比例） -->
+  <circle cx="270" cy="285" r="225" fill="#dbe7f5" stroke="#2f5f98" stroke-width="2"/>
+  <circle cx="270" cy="345" r="150" fill="#a9c6ea" stroke="#2f5f98" stroke-width="2"/>
+  <circle cx="270" cy="405" r="80" fill="#2f5f98" stroke="#1d3d66" stroke-width="2"/>
+
+  <text x="270" y="105" text-anchor="middle" font-size="26" font-weight="700" fill="#1d3d66">TAM</text>
+  <text x="270" y="135" text-anchor="middle" font-size="17" fill="#1d3d66">亞太數位鑑識市場</text>
+  <text x="270" y="160" text-anchor="middle" font-size="17" fill="#1d3d66">US$21.1 億（≈ NT$675 億）</text>
+
+  <text x="270" y="243" text-anchor="middle" font-size="24" font-weight="700" fill="#1d3d66">SAM</text>
+  <text x="270" y="270" text-anchor="middle" font-size="16" fill="#1d3d66">台灣 235 家大型醫院</text>
+  <text x="270" y="293" text-anchor="middle" font-size="16" fill="#1d3d66">維運版 ≈ NT$3,168 萬／年</text>
+
+  <text x="270" y="395" text-anchor="middle" font-size="22" font-weight="700" fill="#ffffff">SOM</text>
+  <text x="270" y="420" text-anchor="middle" font-size="15" fill="#ffffff">第 3 年</text>
+  <text x="270" y="442" text-anchor="middle" font-size="15" fill="#ffffff">≈ NT$407 萬／年</text>
+
+  <!-- 右側說明 -->
+  <text x="540" y="70" font-size="24" font-weight="700" fill="#1a1a1a">ForensiKit 市場規模</text>
+  <text x="540" y="94" font-size="14" fill="#666666">圓的大小為示意，非等比例。</text>
+  <text x="540" y="112" font-size="14" fill="#666666">標「假設」者為團隊估計，待醫院訪談校正。</text>
+
+  <rect x="540" y="122" width="18" height="18" fill="#dbe7f5" stroke="#2f5f98"/>
+  <text x="568" y="137" font-size="17" font-weight="700" fill="#1a1a1a">TAM：亞太數位鑑識（2025）</text>
+  <text x="568" y="160" font-size="14" fill="#333333">US$21.1 億，2030 年約 US$41.1 億（CAGR 14.3%）</text>
+  <text x="568" y="180" font-size="14" fill="#333333">來源：MarketsandMarkets；匯率假設 US$1 = NT$32</text>
+
+  <rect x="540" y="212" width="18" height="18" fill="#a9c6ea" stroke="#2f5f98"/>
+  <text x="568" y="227" font-size="17" font-weight="700" fill="#1a1a1a">SAM：台灣大型醫院（由下而上）</text>
+  <text x="568" y="250" font-size="14" fill="#333333">235 家 × 端點數（假設）= 158,400 端點</text>
+  <text x="568" y="270" font-size="14" fill="#333333">× 維運版 NT$200／端點／年（假設）</text>
+  <text x="568" y="290" font-size="14" fill="#333333">延伸：非公立診所 23,394 家 ≈ NT$7,018 萬／年</text>
+
+  <rect x="540" y="322" width="18" height="18" fill="#2f5f98" stroke="#1d3d66"/>
+  <text x="568" y="337" font-size="17" font-weight="700" fill="#1a1a1a">SOM：前 3 年可取得（假設）</text>
+  <text x="568" y="360" font-size="14" fill="#333333">24 家醫院（SAM 的 10%）≈ NT$317 萬</text>
+  <text x="568" y="380" font-size="14" fill="#333333">＋ 3 家事件處理廠商／MSSP 商用授權 ≈ NT$90 萬</text>
+
+  <line x1="540" y1="412" x2="920" y2="412" stroke="#cccccc"/>
+  <text x="540" y="440" font-size="15" font-weight="700" fill="#1a1a1a">商業模式：開放核心</text>
+  <text x="540" y="463" font-size="14" fill="#333333">社群版免費（機構自用、教育、政府）</text>
+  <text x="540" y="483" font-size="14" fill="#333333">維運版按端點年費：集中狀態監控、部署更新、SLA、演練</text>
+  <text x="540" y="503" font-size="14" fill="#333333">商用授權：廠商在付費服務中使用</text>
+</svg>
