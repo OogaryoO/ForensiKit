@@ -79,6 +79,13 @@ FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>/
 
 `files[].path` 一律用 `/` 分隔、相對於證據包根目錄。`manifest.json` 本身不列入 `files`；它的 SHA-256 寫在 `chain_of_custody.txt` 並顯示在 GUI 上。
 
+- **不列入 `files` 的檔案**只有 `manifest.json` 與 `chain_of_custody.txt`（後者內含 manifest 雜湊，無法反過來列入）。`Test-FKPackage` 把這兩個檔案視為預期存在，不算 `Extra`。
+- `action_log.jsonl` **有**列入 `files`。因此：
+  - `New-FKManifest` 自己的 action log 必須在計算雜湊**之前**寫入。
+  - 呼叫 `New-FKManifest` 之後，**不得再寫入該證據包的 action log**；`Invoke-ForensiKit` 在 `New-FKManifest` 之後立刻 `Close-FKActionLog`。
+  - 加密（`Protect-FKPackage`）在 `Close-FKActionLog` 之後執行，不寫入證據包內的 action log。`Invoke-ForensiKit` 在產生 manifest 之前先寫一筆 `EncryptPackage`（`detail` 註明「將於 manifest 之後加密」）；加密結果只出現在回傳值（`PackagePath`、`Status`）與 GUI。
+- `Test-FKPackage`：`manifest.json` 遺失時 `Missing` 含 `manifest.json`，不是合法 JSON 時 `Mismatched` 含 `manifest.json`，兩者都回傳 `IsValid = $false`、**不 throw**（只有 `PackageRoot` 不存在才 throw）。`chain_of_custody.txt` 中記錄的 manifest SHA-256 與實際不符時，`Mismatched` 含 `manifest.json`。
+
 ### action_log.jsonl（每行一個 JSON）
 
 ```json
@@ -102,7 +109,9 @@ FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>/
 
 ## 5. Vault（常駐保全的備份位置）
 
-- 路徑：`C:\ProgramData\ForensiKit\vault\<Channel 安全名稱>\<yyyyMMddTHHmmssZ>.evtx`；檔名時間為該次備份的 UTC 時間，可用內部函式 `ConvertFrom-FKVaultFileName` 解析。
+- 路徑：`C:\ProgramData\ForensiKit\vault\<Channel 安全名稱>\<yyyyMMddTHHmmssZ>.evtx`；檔名時間是該次備份**開始**的 UTC 時間（同一次備份的所有 channel 共用），一律用內部函式 `ConvertFrom-FKVaultFileName`（`Private/ConvertFrom-FKVaultFileName.ps1`）解析，格式不符時回傳 `$null`。
+  - 備份檔**可能含比檔名時間稍晚的事件**（同一次備份逐一匯出各 channel 需要時間）。依檔名時間判斷要不要略過某份備份時，必須保留安全邊界（`Export-FKEventLog` 使用 60 分鐘）。
+- **vault 位置的來源**：已安裝常駐保全時以 `<安裝目錄>\preservation.json` 的 `preservation.vaultRoot` 為準，否則用 `Get-FKConfig` 的預設設定。需要 vault 設定的函式（`Export-FKEventLog -IncludeVault`、`Get-FKPreservationStatus` 等）一律透過內部函式 `Get-FKPreservationConfig` 取得，不得自行讀取設定檔。
 - 權限：SYSTEM 完全控制、Administrators 唯讀，其他人無權限，不繼承上層權限。
 - 由排程工作 `\ForensiKit\VaultBackup` 每 `vaultIntervalMinutes` 分鐘（預設 60）以 SYSTEM 身分執行一次，開機時與安裝完成時也各執行一次。
 - **增量備份**：每個 channel 的第一份備份是整個 channel；之後每份只含「上一份備份時間往前 5 分鐘」之後的事件。因此：
@@ -150,6 +159,14 @@ FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>/
 | `Unprotect-FKPackage` | `-Path <string> -Password <SecureString> -Destination <string>` | `{PackageRoot}` | T08 |
 | `Invoke-ForensiKit` | `-CaseId <string> -Operator <string> -StartUtc <datetime> -EndUtc <datetime> -OutputRoot <string> [-Password <SecureString>] [-NoEncrypt]` | `{PackageRoot, PackagePath, ManifestSha256, Results, DurationSec, Status}` | T09 |
 | `Start-ForensiKitGui` | 無 | 無 | T10 |
+
+### Export-FKEventLog 的輸出與 vault 結果
+- `-Destination` 是證據包中的 `evtx` 目錄（例如 `<PackageRoot>\evtx`），函式在底下建立 `live\` 與 `vault\`（第 4 節）。
+- `Source = 'Live'`：每個 channel 一筆，`Path` 為 `live\<Channel 安全名稱>.evtx`。channel 不存在時 `Skipped`、`Path` 與 `EventCount` 為 `$null`。
+- `Source = 'Vault'`（只在 `-IncludeVault` 時）：**每個 channel 一筆**，`Path` 為輸出目錄 `vault\<Channel 安全名稱>\`，`EventCount` 為各份備份匯出筆數的合計。
+  - `Status`：全部成功 `OK`；部分失敗 `Partial`；全部失敗 `Failed`；vault 中沒有該 channel 的備份（或 vault 不存在）`Skipped`。
+  - 有備份但全部依時間略過時為 `OK`、`EventCount = 0`、`Path = $null`。
+  - 帶 `/` 的 channel 在 vault 與輸出中同樣以 `%4` 表示。
 
 ### 常駐保全回傳物件的子欄位
 - `Install-FKPreservation` 的 `LogSizesApplied`：每個 channel 一筆 `{Channel, PreviousMB, TargetMB, Status}`。只加大不縮小；已達上限時 `Status = 'OK'` 且不變更；channel 不存在時 `Skipped`。
