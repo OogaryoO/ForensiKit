@@ -20,9 +20,7 @@
     [CmdletBinding()]
     param()
 
-    $configPath = Join-Path (Get-FKInstallRoot) 'preservation.json'
-    if (Test-Path -LiteralPath $configPath -PathType Leaf) { $config = Get-FKConfig -Path $configPath }
-    else { $config = Get-FKConfig }
+    $config = Get-FKPreservationConfig
 
     $taskInfo = Get-FKVaultTaskInfo
 

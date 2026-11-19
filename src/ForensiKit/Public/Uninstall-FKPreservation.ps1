@@ -33,8 +33,7 @@
     # vault 位置以安裝時的設定為準；找不到時用內建預設值
     $vaultRoot = $null
     try {
-        if (Test-Path -LiteralPath $configPath -PathType Leaf) { $vaultRoot = [string](Get-FKConfig -Path $configPath).preservation.vaultRoot }
-        else { $vaultRoot = [string](Get-FKConfig).preservation.vaultRoot }
+        $vaultRoot = [string](Get-FKPreservationConfig).preservation.vaultRoot
     }
     catch {
         Write-Warning "無法讀取設定，略過 vault：$($_.Exception.Message)"

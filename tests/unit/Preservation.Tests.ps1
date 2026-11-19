@@ -325,5 +325,41 @@ Describe '常駐保全（T06）' -Tag 'T06' {
                 ConvertFrom-FKVaultFileName -Name 'garbage.evtx' | Should -BeNullOrEmpty
             }
         }
+
+        It '接受完整路徑' {
+            InModuleScope ForensiKit {
+                $t = ConvertFrom-FKVaultFileName -Name 'C:\ProgramData\ForensiKit\vault\Security\20261120T031500Z.evtx'
+                $t.ToString('yyyy-MM-dd HH:mm:ss') | Should -Be '2026-11-20 03:15:00'
+            }
+        }
+    }
+
+    Context 'Get-FKPreservationConfig' {
+
+        It '尚未安裝時回傳預設設定' {
+            InModuleScope ForensiKit {
+                (Get-FKPreservationConfig).preservation.vaultRoot | Should -Be (Get-FKConfig).preservation.vaultRoot
+            }
+        }
+
+        It '已安裝時以 preservation.json 的 vaultRoot 為準' {
+            New-Item -ItemType Directory -Path $script:InstallRoot -Force | Out-Null
+            $custom = Join-Path $script:Root 'CustomVault'
+            $null = New-TestConfigFile -Path (Join-Path $script:InstallRoot 'preservation.json') -VaultRoot $custom
+            InModuleScope ForensiKit -Parameters @{ Expected = $custom } {
+                param($Expected)
+                (Get-FKPreservationConfig).preservation.vaultRoot | Should -Be $Expected
+            }
+        }
+
+        It 'preservation.json 損壞時輸出 Warning 並改用預設設定' {
+            New-Item -ItemType Directory -Path $script:InstallRoot -Force | Out-Null
+            [System.IO.File]::WriteAllText((Join-Path $script:InstallRoot 'preservation.json'), '{ not json')
+            InModuleScope ForensiKit {
+                $cfg = Get-FKPreservationConfig -WarningVariable w -WarningAction SilentlyContinue
+                $cfg.preservation.vaultRoot | Should -Be (Get-FKConfig).preservation.vaultRoot
+                @($w).Count | Should -BeGreaterThan 0
+            }
+        }
     }
 }

@@ -109,32 +109,6 @@ function Get-FKLatestVaultBackupTime {
     return $latest
 }
 
-function ConvertFrom-FKVaultFileName {
-    <#
-    .SYNOPSIS
-        把 vault 備份檔名 yyyyMMddTHHmmssZ.evtx 轉成 Kind = Utc 的 [datetime]；格式不符時回傳 $null。
-
-    .PARAMETER Name
-        檔名（含或不含 .evtx）。
-
-    .EXAMPLE
-        ConvertFrom-FKVaultFileName -Name '20261120T031500Z.evtx'
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)]
-        [string]$Name
-    )
-
-    $base = [System.IO.Path]::GetFileNameWithoutExtension($Name)
-    $parsed = [datetime]::MinValue
-    $styles = [System.Globalization.DateTimeStyles]'AssumeUniversal, AdjustToUniversal'
-    if ([datetime]::TryParseExact($base, "yyyyMMdd'T'HHmmss'Z'", [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) {
-        return $parsed
-    }
-    return $null
-}
-
 function Limit-FKVaultSize {
     <#
     .SYNOPSIS
