@@ -1,0 +1,13 @@
+{
+  "schemaVersion": "1.0",
+  "note": "Artifact-level expectations that complement the per-scenario event files. Each entry asserts that the named artifact JSON under artifacts/ contains the given case-insensitive substring. Checked by the E2E harness (T12) alongside AC4 event hit-rate.",
+  "scenarios": {
+    "S4": [
+      { "artifact": "scheduled_tasks.json", "contains": "fk_updater", "note": "Persistence scheduled task is captured" },
+      { "artifact": "autoruns.json", "contains": "fk_updater", "note": "HKCU Run autostart entry is captured" }
+    ],
+    "S5": [
+      { "artifact": "dns_cache.json", "contains": "example.com", "note": "DNS client cache snapshot contains the queried name" }
+    ]
+  }
+}

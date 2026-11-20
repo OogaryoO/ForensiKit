@@ -1,0 +1,16 @@
+[
+  {
+    "channel": "Microsoft-Windows-Sysmon/Operational",
+    "eventId": 1,
+    "minCount": 2,
+    "match": "",
+    "note": "Process-create events for the recon commands (whoami/net/ipconfig via cmd)"
+  },
+  {
+    "channel": "Microsoft-Windows-Sysmon/Operational",
+    "eventId": 22,
+    "minCount": 1,
+    "match": "QueryName=example.com",
+    "note": "Sysmon DNS query for example.com"
+  }
+]
