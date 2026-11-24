@@ -1,6 +1,6 @@
 ﻿<#
     T09a：Invoke-ForensiKit 實作細節的測試（開發者補充；契約層級的測試見 QA 的 T11 Invoke-ForensiKit.Tests.ps1）。
-    只 Mock wevtutil、Get-WinEvent 與管理員檢查，Export-FKEventLog 與 New-FKManifest 用真的實作串起來。檔案只寫在 TestDrive。
+    只 Mock wevtutil（epl、gl、gli）與管理員檢查，Export-FKEventLog 與 New-FKManifest 用真的實作串起來。檔案只寫在 TestDrive。
 #>
 
 BeforeAll {
@@ -11,8 +11,9 @@ BeforeAll {
     $script:end = New-Object datetime 2026, 11, 21, 0, 0, 0, ([DateTimeKind]::Utc)
 
     $script:fakeWevtutil = {
-        if ([string]$args[0] -eq 'epl') { [System.IO.File]::WriteAllText([string]$args[2], 'fake-evtx') }
         $global:LASTEXITCODE = 0
+        if ([string]$args[0] -eq 'epl') { [System.IO.File]::WriteAllText([string]$args[2], 'fake-evtx') }
+        if ([string]$args[0] -eq 'gli') { return @('fileSize: 69632', 'numberOfLogRecords: 5') }
     }
 
     function Get-RefSha256([string]$Path) {
@@ -37,7 +38,6 @@ Describe 'Invoke-ForensiKit 實作細節（T09a）' -Tag 'T09a' {
 
     BeforeEach {
         Mock wevtutil -ModuleName ForensiKit $script:fakeWevtutil
-        Mock Get-WinEvent -ModuleName ForensiKit -ParameterFilter { $null -ne $Path } { 1..5 | ForEach-Object { [pscustomobject]@{ Id = 4624 } } }
         Mock Test-FKAdmin -ModuleName ForensiKit { $true }
         $script:out = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
         New-Item -ItemType Directory -Path $script:out | Out-Null

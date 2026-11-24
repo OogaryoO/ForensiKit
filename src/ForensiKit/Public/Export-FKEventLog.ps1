@@ -9,6 +9,9 @@
           - 現行 log：<Destination>\live\<Channel 安全名稱>.evtx
           - vault   ：<Destination>\vault\<Channel 安全名稱>\<備份時間>.evtx（檔名與 vault 中的備份檔相同）
         Channel 安全名稱是把 / 改為 %4（ConvertTo-FKSafeChannelName）。
+        EventCount 是匯出檔的 numberOfLogRecords（wevtutil gli <file> /lf:true）。
+        輸出檔已存在時 wevtutil epl 會失敗（不加 /ow:true，避免覆寫證據），該 channel 為 Failed；
+        Invoke-ForensiKit 每次都建立新的證據包目錄，單獨呼叫時請指定新的 Destination。
 
         錯誤處理（契約第 3 節）：
           - channel 不存在（例如沒裝 Sysmon，wevtutil exit code 15007）→ Status = Skipped
@@ -107,17 +110,14 @@
     }
 
     function Measure-FKEvtxEvent {
-        # 以 Get-WinEvent -Path 計算筆數（TASKS.md T04）。沒有事件時 Get-WinEvent 會 throw NoMatchingEventsFound，視為 0 筆。
+        # 以 wevtutil gli <file> /lf:true 的 numberOfLogRecords 計算筆數（PM 於 #29 決定：Get-WinEvent -Path 逐筆讀取太慢，影響 AC1）。
+        # 回傳 {Count, CommandLine}；失敗時 throw，由呼叫端記成 Partial。
         param([string]$Path)
-        $escaped = [System.Management.Automation.WildcardPattern]::Escape($Path)
-        try {
-            # 用管線串流計數，大型 log 不必整個載入記憶體
-            return [int](Get-WinEvent -Path $escaped -ErrorAction Stop | Measure-Object).Count
-        }
-        catch {
-            if ([string]$_.FullyQualifiedErrorId -like 'NoMatchingEventsFound*') { return 0 }
-            throw
-        }
+        $r = Invoke-FKWevtutil -ArgumentList @('gli', $Path, '/lf:true')
+        if ($r.ExitCode -ne 0) { throw ('{0} → exit {1}：{2}' -f $r.CommandLine, $r.ExitCode, $r.Output) }
+        $m = [regex]::Match($r.Output, 'numberOfLogRecords:\s*(\d+)')
+        if (-not $m.Success) { throw ('{0} → 輸出中找不到 numberOfLogRecords：{1}' -f $r.CommandLine, $r.Output) }
+        return [pscustomobject]@{ Count = [long]$m.Groups[1].Value; CommandLine = $r.CommandLine }
     }
 
     function Export-FKEvtxFile {
@@ -140,15 +140,15 @@
         }
 
         try {
-            $count = Measure-FKEvtxEvent -Path $OutFile
+            $measured = Measure-FKEvtxEvent -Path $OutFile
         }
         catch {
             Write-FKAction -Action $ActionName -Target $Source -Detail ('{0} → 已匯出，但無法計算筆數：{1}' -f $r.CommandLine, $_.Exception.Message) -Status 'Partial'
             return [pscustomobject]@{ Path = $OutFile; EventCount = $null; Status = 'Partial' }
         }
 
-        Write-FKAction -Action $ActionName -Target $Source -Detail ('{0} → {1} 筆事件' -f $r.CommandLine, $count) -Status 'OK'
-        return [pscustomobject]@{ Path = $OutFile; EventCount = $count; Status = 'OK' }
+        Write-FKAction -Action $ActionName -Target $Source -Detail ('{0} → {1} 筆事件（{2}）' -f $r.CommandLine, $measured.Count, $measured.CommandLine) -Status 'OK'
+        return [pscustomobject]@{ Path = $OutFile; EventCount = $measured.Count; Status = 'OK' }
     }
 
     function ConvertTo-FKEventLogResult {
