@@ -12,13 +12,17 @@
              vault 備份中同一時段的事件 → <PackageRoot>\evtx\vault\（尚未安裝常駐保全時 vault 結果為 Skipped）
           5. Get-FKArtifact：7 種 artifact → <PackageRoot>\artifacts\
           6. New-FKManifest：manifest.json 與 chain_of_custody.txt；之後立刻結束 action log
+          7. 除非 -NoEncrypt：Protect-FKPackage 產生 <PackageRoot>.fkpkg（在 action log 關閉之後，docs/ARCHITECTURE.md 第 4 節）
         任何步驟 Failed 或 Partial 時整體 Status = 'Partial'，仍會產出 manifest；manifest 本身失敗時 Status = 'Failed'。
         Skipped（例如沒裝 Sysmon、沒有 vault）不影響整體狀態。
 
-        加密（T08）尚未實作：
-          - 指定 -NoEncrypt：不加密，PackagePath = $null。
-          - 指定 -Password 而沒有 -NoEncrypt：action log 記錄「加密略過」，Status = 'Partial'，PackagePath = $null。
-          - 兩者都沒有：throw（參數錯誤）。
+        加密（契約第 4 節的 manifest 規則）：
+          - 要加密時，在產生 manifest 之前先寫一筆 EncryptPackage（detail 註明「將於 manifest 之後加密」），
+            加密本身在 manifest 與 Close-FKActionLog 之後執行，不寫入證據包內的 action log。
+          - 加密結果只出現在回傳值：成功時 PackagePath 為 .fkpkg 路徑，Results 多一筆 Name = 'EncryptPackage'；
+            失敗時 PackagePath = $null、該筆 Status = 'Failed'、整體 Status 至少為 'Partial'（明文證據包仍保留）。
+          - 明文證據包目錄會保留（不使用 -RemovePlaintext），由操作者依 SOP 決定是否刪除。
+          - -NoEncrypt：不加密，PackagePath = $null。兩者都沒有：throw（參數錯誤）。
 
     .PARAMETER CaseId
         案號。用於證據包目錄名稱（檔名不允許的字元與 [ ] 會換成 _）與 manifest。
@@ -36,7 +40,7 @@
         證據包要放的位置（例如隨身碟根目錄），必須已存在。
 
     .PARAMETER Password
-        加密證據包用的密碼（T08 實作後生效）。
+        加密證據包用的密碼（Protect-FKPackage）。請另行安全地交給接收方。
 
     .PARAMETER NoEncrypt
         不加密證據包。
@@ -138,8 +142,8 @@
         }
 
         if (-not $NoEncrypt) {
-            Write-FKAction -Action 'EncryptPackage' -Target $packageRoot -Detail '加密（T08）尚未實作，證據包未加密' -Status 'Skipped'
-            $status = 'Partial'
+            # 加密在 manifest 與關閉 action log 之後執行，結果無法再寫進證據包內的 action log，所以先記錄意圖（#28 第 4 節）
+            Write-FKAction -Action 'EncryptPackage' -Target ($packageRoot + '.fkpkg') -Detail '將於 manifest 之後以 Protect-FKPackage 加密（Deflate + AES-256-CBC + HMAC-SHA256），結果見回傳值 PackagePath' -Status 'OK'
         }
 
         foreach ($r in $results) {
@@ -159,12 +163,28 @@
     finally {
         if ($previousLog) { $null = Open-FKActionLog -PackageRoot (Split-Path -Path $previousLog -Parent) }
         else { Close-FKActionLog }
-        $stopwatch.Stop()
     }
+
+    # ---- 加密（action log 已關閉） ----
+
+    $packagePath = $null
+    if (-not $NoEncrypt) {
+        try {
+            $enc = Protect-FKPackage -PackageRoot $packageRoot -Password $Password
+            $packagePath = $enc.PackagePath
+            $results.Add([pscustomobject]@{ Name = 'EncryptPackage'; Path = $packagePath; ItemCount = $null; Status = 'OK' })
+        }
+        catch {
+            Write-Warning ("加密失敗，明文證據包仍保留在 {0}：{1}" -f $packageRoot, $_.Exception.Message)
+            $results.Add([pscustomobject]@{ Name = 'EncryptPackage'; Path = $null; ItemCount = $null; Status = 'Failed' })
+            if ($status -eq 'OK') { $status = 'Partial' }
+        }
+    }
+    $stopwatch.Stop()
 
     return [pscustomobject]@{
         PackageRoot    = $packageRoot
-        PackagePath    = $null
+        PackagePath    = $packagePath
         ManifestSha256 = $manifestSha
         Results        = $results.ToArray()
         DurationSec    = [math]::Round($stopwatch.Elapsed.TotalSeconds, 1)

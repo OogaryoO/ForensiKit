@@ -12,8 +12,9 @@ BeforeAll {
     $script:end = New-Object datetime 2026, 11, 21, 0, 0, 0, ([DateTimeKind]::Utc)
 
     $script:fakeWevtutil = {
-        if ([string]$args[0] -eq 'epl') { [System.IO.File]::WriteAllText([string]$args[2], 'fake-evtx') }
         $global:LASTEXITCODE = 0
+        if ([string]$args[0] -eq 'epl') { [System.IO.File]::WriteAllText([string]$args[2], 'fake-evtx') }
+        if ([string]$args[0] -eq 'gli') { return @('fileSize: 69632', 'numberOfLogRecords: 5') }
     }
 
     # 假的 vault：只有 Security 有一份時段內的備份
@@ -158,14 +159,48 @@ Describe 'Invoke-ForensiKit 實作細節（T09）' -Tag 'T09a', 'T09' {
             (Get-Content -LiteralPath (Join-Path $r.PackageRoot 'manifest.json') -Raw -Encoding UTF8 | ConvertFrom-Json).case.caseId | Should -Be '2026/001:[A]'
         }
 
-        It '有 -Password 但加密尚未實作時：Status = Partial，action log 記錄 EncryptPackage Skipped' {
+        It '有 -Password：manifest 之後加密成 .fkpkg，解密後與明文證據包一致且通過 Test-FKPackage' {
             $p = $script:common.Clone()
             $p.Remove('NoEncrypt')
             $p.Password = New-SecureText 'P@ssw0rd-for-unit-test'
             $r = Invoke-ForensiKit @p
+            $r.Status | Should -Be 'OK'
+            $r.PackagePath | Should -Be ($r.PackageRoot + '.fkpkg')
+            $r.PackagePath | Should -Exist
+            ($r.Results | Where-Object { $_.Name -eq 'EncryptPackage' }).Status | Should -Be 'OK'
+            (Test-FKPackage -PackageRoot $r.PackageRoot).IsValid | Should -BeTrue -Because '加密不得改動明文證據包（manifest 之後不寫 action log）'
+            $restored = Unprotect-FKPackage -Path $r.PackagePath -Password $p.Password -Destination (Join-Path $TestDrive ([guid]::NewGuid().ToString('N')))
+            (Test-FKPackage -PackageRoot $restored.PackageRoot).IsValid | Should -BeTrue
+        }
+
+        It '加密時 action log：EncryptPackage 寫在 CreateManifest 之前，之後沒有任何紀錄' {
+            $p = $script:common.Clone()
+            $p.Remove('NoEncrypt')
+            $p.Password = New-SecureText 'P@ssw0rd-for-unit-test'
+            $r = Invoke-ForensiKit @p
+            $actions = @(Read-Actions $r.PackageRoot | ForEach-Object action)
+            $actions.IndexOf('EncryptPackage') | Should -BeLessThan $actions.IndexOf('CreateManifest')
+            $actions[-1] | Should -Be 'CreateManifest'
+            ((Read-Actions $r.PackageRoot) | Where-Object { $_.action -eq 'EncryptPackage' }).detail | Should -Match 'manifest 之後'
+        }
+
+        It '-NoEncrypt 時不呼叫 Protect-FKPackage，也不寫 EncryptPackage' {
+            Mock Protect-FKPackage -ModuleName ForensiKit { throw 'should not be called' }
+            $r = Invoke-ForensiKit @script:common
+            Should -Invoke Protect-FKPackage -ModuleName ForensiKit -Times 0 -Exactly -Scope It
+            @(Read-Actions $r.PackageRoot | ForEach-Object action) | Should -Not -Contain 'EncryptPackage'
+        }
+
+        It '加密失敗時：PackagePath = $null、Status = Partial、明文證據包保留' {
+            Mock Protect-FKPackage -ModuleName ForensiKit { throw 'disk full' }
+            $p = $script:common.Clone()
+            $p.Remove('NoEncrypt')
+            $p.Password = New-SecureText 'P@ssw0rd-for-unit-test'
+            $r = Invoke-ForensiKit @p -WarningAction SilentlyContinue
             $r.Status | Should -Be 'Partial'
             $r.PackagePath | Should -BeNullOrEmpty
-            ((Read-Actions $r.PackageRoot) | Where-Object { $_.action -eq 'EncryptPackage' }).status | Should -Be 'Skipped'
+            ($r.Results | Where-Object { $_.Name -eq 'EncryptPackage' }).Status | Should -Be 'Failed'
+            (Test-FKPackage -PackageRoot $r.PackageRoot).IsValid | Should -BeTrue
         }
 
         It 'artifact 步驟 Failed 時 Status = Partial，仍產出 manifest' {
