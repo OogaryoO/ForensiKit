@@ -12,7 +12,8 @@
           Processes          → processes.json
           NetworkConnections → network_connections.json
           DnsCache           → dns_cache.json
-        除了 Prefetch，其他都是「收集當下的狀態快照」，不依時段篩選（契約第 7 節）；時間欄位一律為 ISO 8601 UTC 字串。
+        除了 Prefetch，其他都是「收集當下的狀態快照」，不依時段篩選（契約第 7 節）；時間欄位一律為 ISO 8601 UTC 字串，
+        欄位名稱以 Utc 結尾。排程的註冊時間另保留原始字串 RegistrationDateRaw（排程 XML 中通常是沒有時區的本地時間）。
         JSON 為 UTF-8（無 BOM）的陣列。可執行檔附 SHA-256（小寫），檔案不存在、路徑不完整或無權限時為 null，不中斷。
 
         資料來源（單元測試可 Mock 這些 cmdlet）：
@@ -74,6 +75,19 @@
         param([datetime]$Date)
         if ($Date.Kind -eq [System.DateTimeKind]::Local) { return $Date.ToUniversalTime() }
         return [datetime]::SpecifyKind($Date, [System.DateTimeKind]::Utc)
+    }
+
+    function ConvertFrom-FKTaskDate {
+        # 排程 XML 的 RegistrationInfo/Date 是字串，通常是「收集電腦的本地時間、沒有時區」（例如 2026-11-20T08:02:00），
+        # 也可能帶 Z 或 +08:00。帶時區的照時區轉換；沒有時區的視為本地時間，轉成 ISO 8601 UTC。無法解析時回傳 $null。
+        param($Value)
+        if ([string]::IsNullOrWhiteSpace([string]$Value)) { return $null }
+        $parsed = [datetime]::MinValue
+        $styles = [System.Globalization.DateTimeStyles]'AssumeLocal, AdjustToUniversal'
+        if ([datetime]::TryParse([string]$Value, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) {
+            return (ConvertTo-FKIsoUtc -Date ([datetime]::SpecifyKind($parsed, [System.DateTimeKind]::Utc)))
+        }
+        return $null
     }
 
     function ConvertTo-FKIsoOrNull {
@@ -272,7 +286,8 @@
                     State            = [string]$t.State
                     Author           = $t.Author
                     Description      = $t.Description
-                    RegistrationDate = $t.Date
+                    RegistrationDateUtc = ConvertFrom-FKTaskDate $t.Date
+                    RegistrationDateRaw = $t.Date
                     UserId           = $userId
                     RunLevel         = $runLevel
                     LastRunTimeUtc   = $lastRun
