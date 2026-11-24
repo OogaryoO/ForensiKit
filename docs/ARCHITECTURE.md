@@ -58,7 +58,7 @@ FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>/
    └─ dns_cache.json
 ```
 
-加密後成為單一檔案 `FK_..._<時間>.fkpkg`（T08）。
+加密後成為單一檔案 `FK_..._<時間>.fkpkg`（T08，格式見下方「.fkpkg」小節）。
 
 ### manifest.json
 
@@ -106,6 +106,42 @@ FK_<CaseId>_<ComputerName>_<yyyyMMddTHHmmssZ>/
   - 單元測試可用 `InModuleScope ForensiKit { Open-FKActionLog -PackageRoot $TestDrive }` 指定證據包。
   - 會暫時切換 action log 的函式（例如 `Install-FKPreservation` 改寫到 vault 根目錄）結束前必須還原成原本的路徑。
 - `channel` 名稱轉成檔名（`/` → `%4`）一律使用內部函式 `ConvertTo-FKSafeChannelName`；ISO 8601 字串一律使用 `ConvertTo-FKIsoUtc`。
+
+### .fkpkg（加密證據包，T08）
+
+打包方式由 PM 於 #11 決定：**自訂串流格式**，打包、壓縮、加密、HMAC 一次串流完成，磁碟上不會出現未加密的副本，也沒有大小上限。`.fkpkg` 不是 zip，只能用 `Unprotect-FKPackage` 還原。
+
+檔案結構（整數一律 little-endian）：
+
+| offset | 長度 | 內容 |
+|---|---|---|
+| 0 | 5 | 魔術字 ASCII `FKPKG` |
+| 5 | 1 | 格式版本，目前為 `1` |
+| 6 | 1 | 金鑰推導演算法，`1` = PBKDF2-HMAC-SHA256 |
+| 7 | 4 | PBKDF2 迭代次數（UInt32）。`Protect-FKPackage` 使用 200,000；`Unprotect-FKPackage` 只接受 100,000 – 10,000,000 |
+| 11 | 16 | salt（每次隨機） |
+| 27 | 16 | AES IV（每次隨機） |
+| 43 | 32 | HMAC-SHA256，計算範圍是 **offset 0–42 的檔頭 ‖ offset 75 起的密文**（不含 HMAC 欄位本身） |
+| 75 | 到檔尾 | 密文：AES-256-CBC、PKCS7 padding（長度為 16 的倍數） |
+
+- **金鑰**：`PBKDF2-HMAC-SHA256(密碼的 UTF-8 位元組, salt, 迭代次數)` 推導 64 位元組；前 32 位元組為 AES 金鑰，後 32 位元組為 HMAC 金鑰。
+- **明文**（解密後）是以 Deflate（`System.IO.Compression.DeflateStream`，無 zlib／gzip 標頭）壓縮的「記錄串流」：
+
+  | 欄位 | 型別 | 說明 |
+  |---|---|---|
+  | 路徑長度 | UInt16 | 路徑的 UTF-8 位元組數（1–65535）；**0 表示結束記錄**，之後不得再有資料 |
+  | 路徑 | UTF-8 | 相對於證據包根目錄，以 `/` 分隔，例如 `evtx/live/Security.evtx` |
+  | 大小 | Int64 | 內容的位元組數（≥ 0） |
+  | 內容 | 位元組 | 檔案原始內容 |
+
+  證據包根目錄下所有檔案（含 `manifest.json`、`chain_of_custody.txt`、`action_log.jsonl`）各一筆，依完整路徑排序，最後一筆是結束記錄。空目錄不保留。
+- **加密順序**（第 4 節 manifest 規則）：在 `New-FKManifest` 與 `Close-FKActionLog` 之後執行，不寫入證據包內的 action log。
+- **解密**（`Unprotect-FKPackage`）：
+  1. 先驗證 HMAC（固定時間比較）。不一致時 throw「密碼錯誤，或檔案已損毀／遭竄改」，**不在目的地建立任何檔案或目錄**。
+  2. 驗證通過後才解密、解壓，逐筆寫到目的地下的暫存目錄，全部成功才改名為 `<目的地>\<.fkpkg 檔名去掉副檔名>`；任何錯誤都刪除暫存目錄並 throw。
+  3. 逐筆檢查路徑：拒絕空字串、`..`、`.`、空的路徑片段、開頭的 `/`、反斜線、`:`（磁碟代號與 NTFS 替代資料流）、檔名不允許的字元與重複路徑，並確認完整路徑落在暫存目錄之內。
+  4. 缺少結束記錄（內容被截斷）或結束記錄之後還有資料時 throw。
+- 未來若要更改格式，必須遞增格式版本，並讓 `Unprotect-FKPackage` 拒絕不認得的版本。
 
 ## 5. Vault（常駐保全的備份位置）
 
