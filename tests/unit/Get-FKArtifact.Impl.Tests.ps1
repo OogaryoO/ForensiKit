@@ -235,6 +235,24 @@ Describe 'Get-FKArtifact 實作細節（T05）' -Tag 'T05' {
             $t.UserId | Should -Be 'SYSTEM'
             $t.LastRunTimeUtc | Should -Match 'Z$'
             $t.Xml | Should -Be '<Task><Actions/></Task>'
+            $t.PSObject.Properties.Name | Should -Not -Contain 'RegistrationDate'
+        }
+
+        It '排程註冊時間轉成 RegistrationDateUtc（沒有時區視為本地時間），原字串保留在 RegistrationDateRaw' {
+            Mock Get-ScheduledTask -ModuleName ForensiKit {
+                foreach ($d in '2026-11-20T08:02:00', '2026-11-20T08:02:00Z', '2026-11-20T08:02:00+08:00', 'not a date', $null) {
+                    [pscustomobject]@{ TaskPath = '\'; TaskName = "t-$d"; State = 'Ready'; Author = $null; Description = $null; Date = $d; Actions = @(); Triggers = @(); Principal = $null }
+                }
+            }
+            $j = @(Read-Json (Get-FKArtifact -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -Name ScheduledTasks).Path)
+            $localAsUtc = [datetime]::SpecifyKind((New-Object datetime 2026, 11, 20, 8, 2, 0), [DateTimeKind]::Local).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
+            $j[0].RegistrationDateUtc | Should -Be $localAsUtc
+            $j[0].RegistrationDateRaw | Should -Be '2026-11-20T08:02:00'
+            $j[1].RegistrationDateUtc | Should -Be '2026-11-20T08:02:00Z'
+            $j[2].RegistrationDateUtc | Should -Be '2026-11-20T00:02:00Z'
+            $j[3].RegistrationDateUtc | Should -BeNullOrEmpty
+            $j[3].RegistrationDateRaw | Should -Be 'not a date'
+            $j[4].RegistrationDateUtc | Should -BeNullOrEmpty
         }
 
         It '某些排程匯不出 XML 時 Partial，仍輸出其他欄位' {
