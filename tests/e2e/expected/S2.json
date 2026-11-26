@@ -1,0 +1,16 @@
+[
+  {
+    "channel": "Security",
+    "eventId": 4720,
+    "minCount": 1,
+    "match": "TargetUserName=fk_backdoor",
+    "note": "Local user account fk_backdoor created"
+  },
+  {
+    "channel": "Security",
+    "eventId": 4732,
+    "minCount": 1,
+    "match": "TargetSid=S-1-5-32-544",
+    "note": "A member was added to the built-in Administrators group (SID matched locale-independently)"
+  }
+]
