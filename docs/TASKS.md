@@ -67,7 +67,7 @@
 - 用 `wevtutil epl <channel> <dest> /q:"*[System[TimeCreated[@SystemTime>='…' and @SystemTime<='…']]]"` 匯出，保留原生 EVTX 格式。
 - channel 不存在（例如沒裝 Sysmon）回傳 `Skipped`，不得 throw。
 - `-IncludeVault`：對 vault 中每個備份檔以相同時段條件匯出（`wevtutil epl <file> /lf:true …`），存到 `evtx/vault/`。
-- 回傳的 `EventCount` 以 `Get-WinEvent -Path` 計算。
+- 回傳的 `EventCount` 以 `wevtutil gli <file> /lf:true` 的 `numberOfLogRecords` 計算（PM 於 #29 決定：`Get-WinEvent -Path` 逐筆計數太慢，會影響 AC1）。
 - **完成條件**：AC2（時段 100% 正確）在單元／VM 測試中通過。
 
 ### T05 Get-FKArtifact（Y）
@@ -87,9 +87,13 @@
 - **完成條件**：AC6 通過（QA 會刻意竄改檔案測試）。
 
 ### T08 加密（Y）
-- 先 `Compress-Archive` 成 zip，再用 .NET `AesCryptoServiceProvider`（AES-256-CBC）＋ PBKDF2（`Rfc2898DeriveBytes`，≥ 100,000 次、隨機 salt）＋ HMAC-SHA256 驗證完整性。
-- 檔頭格式寫進程式註解與 `ARCHITECTURE.md`（需走 `[contract]` PR 補上）。
-- 密碼錯誤時 `Unprotect` 必須明確報錯，不得輸出損壞檔案。
+- **打包方式：自訂串流格式**（PM 於 #11 決定，取代原本的「先 `Compress-Archive` 成 zip」）。每個檔案依序寫入「路徑長度＋路徑（UTF-8，`/` 分隔）＋大小＋內容」，經 `DeflateStream` 壓縮後直接寫進 AES 加密串流。
+  - 理由：磁碟上從頭到尾**不會出現未加密的副本**（明文暫存檔刪除後仍可能被還原），也沒有 `Compress-Archive` 在 PS 5.1 的 2 GB 上限。
+  - 代價：`.fkpkg` 不是 zip，只能用 `Unprotect-FKPackage` 還原。
+- 加密：.NET `AesCryptoServiceProvider`（AES-256-CBC）＋ PBKDF2（`Rfc2898DeriveBytes`，≥ 100,000 次、隨機 salt）＋ HMAC-SHA256（涵蓋檔頭與密文，解密前先驗證）。
+- 檔頭與內部記錄格式寫進程式註解與 `ARCHITECTURE.md`（需走 `[contract]` PR 補上）。
+- 執行順序依契約第 4 節：在 `New-FKManifest` 與 `Close-FKActionLog` 之後加密，不寫入證據包內的 action log。
+- 密碼錯誤或檔案被竄改時 `Unprotect` 必須明確報錯，不得輸出任何檔案；還原時拒絕含 `..` 或絕對路徑的記錄。
 
 ### T09a 最小端到端版本（Y）
 - 目的：證明技術可行、讓 QA 與 GUI 從 W11 起就有真東西可以接。
