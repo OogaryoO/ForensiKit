@@ -10,9 +10,10 @@ function Register-FKVaultTask {
         以 SYSTEM 身分註冊（或覆寫）排程工作 \ForensiKit\VaultBackup，並立即執行一次。
 
     .DESCRIPTION
-        觸發條件：從現在起每 IntervalMinutes 分鐘一次，無限期重複；另加開機時執行。
+        觸發條件：從現在起 IntervalMinutes 分鐘後開始，每 IntervalMinutes 分鐘一次，無限期重複；另加開機時執行。
         已存在時以 -Force 覆寫，所以重複安裝不會產生第二個排程。
-        立即執行一次，讓 vault 在安裝後馬上就有第一份備份。
+        立即執行一次，讓 vault 在安裝後馬上就有第一份備份（所以重複觸發的起點不設在「現在」，
+        避免安裝後一兩分鐘內又多一份幾乎相同的備份；VM 實測時發現，見 #25）。
 
     .PARAMETER RunnerPath
         排程要執行的 PowerShell 腳本完整路徑。
@@ -37,7 +38,7 @@ function Register-FKVaultTask {
     $argument = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $RunnerPath
     $action = New-ScheduledTaskAction -Execute $powershell -Argument $argument
 
-    $repeat = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1)) -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes)
+    $repeat = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes($IntervalMinutes)) -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes)
     $boot = New-ScheduledTaskTrigger -AtStartup
 
     $principal = New-ScheduledTaskPrincipal -UserId 'S-1-5-18' -LogonType ServiceAccount -RunLevel Highest

@@ -363,3 +363,38 @@ Describe '常駐保全（T06）' -Tag 'T06' {
         }
     }
 }
+
+Describe 'Register-FKVaultTask（排程觸發條件）' -Tag 'T06' {
+
+    BeforeAll {
+        # 安全護欄：不真的註冊或執行排程
+        # New-ScheduledTaskTrigger 等只在記憶體建立 CIM 物件，不 Mock，直接檢查傳給 Register-ScheduledTask 的觸發條件
+        Mock -ModuleName ForensiKit Register-ScheduledTask { $script:FKTestTriggers = $Trigger }
+        Mock -ModuleName ForensiKit Start-ScheduledTask { }
+    }
+
+    It '重複觸發從「現在 + IntervalMinutes」開始（安裝時已立即執行一次，避免馬上又多一份備份）' {
+        $before = Get-Date
+        InModuleScope ForensiKit { Register-FKVaultTask -RunnerPath 'C:\FK\bin\VaultBackup.ps1' -IntervalMinutes 60 }
+        $after = Get-Date
+        # Mock 的本體在測試檔的 script 範圍執行，所以直接讀 $script:FKTestTriggers
+        $triggers = @($script:FKTestTriggers)
+        $triggers.Count | Should -Be 2
+
+        $repeat = $triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskTimeTrigger' }
+        $start = [datetime]::Parse($repeat.StartBoundary)
+        # StartBoundary 精確到秒
+        $start | Should -BeGreaterOrEqual $before.AddMinutes(60).AddSeconds(-1)
+        $start | Should -BeLessOrEqual $after.AddMinutes(60).AddSeconds(1)
+        $repeat.Repetition.Interval | Should -Be 'PT1H'
+        $repeat.Repetition.Duration | Should -BeNullOrEmpty
+
+        @($triggers | Where-Object { $_.CimClass.CimClassName -eq 'MSFT_TaskBootTrigger' }).Count | Should -Be 1
+    }
+
+    It '註冊後立即執行一次' {
+        InModuleScope ForensiKit { Register-FKVaultTask -RunnerPath 'C:\FK\bin\VaultBackup.ps1' -IntervalMinutes 60 }
+        Should -Invoke -ModuleName ForensiKit Register-ScheduledTask -Times 1 -Exactly -ParameterFilter { $TaskPath -eq '\ForensiKit\' -and $TaskName -eq 'VaultBackup' -and $Force }
+        Should -Invoke -ModuleName ForensiKit Start-ScheduledTask -Times 1 -Exactly
+    }
+}
