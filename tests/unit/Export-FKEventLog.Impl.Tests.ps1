@@ -1,6 +1,6 @@
 ﻿<#
     T04：Export-FKEventLog 實作細節的測試（開發者補充；契約層級的測試見 QA 的 T11 Export-FKEventLog.Tests.ps1）。
-    wevtutil 與 Get-WinEvent 都以 Mock 取代，不碰真實事件記錄；檔案只寫在 TestDrive。
+    wevtutil（epl、gl、gli）以 Mock 取代，不碰真實事件記錄；Get-WinEvent 也 Mock 掉並確認不再用於計數。檔案只寫在 TestDrive。
 #>
 
 BeforeAll {
@@ -22,6 +22,13 @@ BeforeAll {
         $source = [string]$args[1]
         if ($source -eq 'FK-Missing') { $global:LASTEXITCODE = 15007; return 'channel not found' }
         if ($verb -eq 'gl') { $global:LASTEXITCODE = 0; return "name: $source" }
+        if ($verb -eq 'gli') {
+            # 筆數由 $global:FKImplGliCount 決定；$global:FKImplGliMode = 'fail' 時失敗、'garbled' 時輸出沒有 numberOfLogRecords
+            if ($global:FKImplGliMode -eq 'fail') { $global:LASTEXITCODE = 2; return 'The system cannot find the file specified.' }
+            $global:LASTEXITCODE = 0
+            if ($global:FKImplGliMode -eq 'garbled') { return @('creationTime: 2026-11-20T01:00:00.000Z', 'fileSize: 69632') }
+            return @('creationTime: 2026-11-20T01:00:00.000Z', 'fileSize: 69632', 'attributes: 32', "numberOfLogRecords: $global:FKImplGliCount", 'oldestRecordNumber: 1')
+        }
         if ($verb -eq 'epl') {
             if ($source -eq 'FK-Denied' -or $source -like '*bad-backup*') { $global:LASTEXITCODE = 5; return 'Access is denied.' }
             [System.IO.File]::WriteAllText([string]$args[2], 'fake-evtx')
@@ -54,7 +61,7 @@ BeforeAll {
 }
 
 AfterAll {
-    Remove-Variable -Name FKImplCalls -Scope Global -ErrorAction SilentlyContinue
+    Remove-Variable -Name FKImplCalls, FKImplGliCount, FKImplGliMode -Scope Global -ErrorAction SilentlyContinue
     Remove-Module ForensiKit -ErrorAction SilentlyContinue
 }
 
@@ -62,10 +69,11 @@ Describe 'Export-FKEventLog 實作細節（T04）' -Tag 'T04' {
 
     BeforeEach {
         $global:FKImplCalls = New-Object System.Collections.ArrayList
+        $global:FKImplGliCount = 4
+        $global:FKImplGliMode = 'ok'
         Mock wevtutil -ModuleName ForensiKit $script:fakeWevtutil
-        Mock Get-WinEvent -ModuleName ForensiKit -ParameterFilter { $null -ne $Path } {
-            1..4 | ForEach-Object { [pscustomobject]@{ Id = 4624 } }
-        }
+        # 計數改用 wevtutil gli（#29），不應再逐筆讀 Get-WinEvent
+        Mock Get-WinEvent -ModuleName ForensiKit { throw 'Get-WinEvent should not be used for counting' }
         $script:dest = Join-Path $TestDrive ([guid]::NewGuid().ToString('N'))
     }
 
@@ -112,22 +120,37 @@ Describe 'Export-FKEventLog 實作細節（T04）' -Tag 'T04' {
             $r.EventCount | Should -Be 4
         }
 
-        It '時段內沒有事件（Get-WinEvent 回報 NoMatchingEventsFound）時 EventCount = 0、Status = OK' {
-            Mock Get-WinEvent -ModuleName ForensiKit -ParameterFilter { $null -ne $Path } {
-                $ex = New-Object System.Exception 'No events were found that match the specified selection criteria.'
-                throw (New-Object System.Management.Automation.ErrorRecord $ex, 'NoMatchingEventsFound,Microsoft.PowerShell.Commands.GetWinEventCommand', 'ObjectNotFound', $null)
-            }
+        It 'EventCount 來自 wevtutil gli <輸出檔> /lf:true 的 numberOfLogRecords，不使用 Get-WinEvent' {
+            $global:FKImplGliCount = 123456
+            $r = Export-FKEventLog -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -Channels 'Security'
+            $r.EventCount | Should -Be 123456
+            $gli = @($global:FKImplCalls | Where-Object { $_[0] -eq 'gli' })
+            $gli.Count | Should -Be 1
+            $gli[0][1] | Should -Be $r.Path
+            $gli[0][2] | Should -Be '/lf:true'
+            Should -Invoke Get-WinEvent -ModuleName ForensiKit -Times 0 -Exactly -Scope It
+        }
+
+        It '時段內沒有事件（numberOfLogRecords: 0）時 EventCount = 0、Status = OK' {
+            $global:FKImplGliCount = 0
             $r = Export-FKEventLog -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -Channels 'Security'
             $r.EventCount | Should -Be 0
             $r.Status | Should -Be 'OK'
         }
 
-        It '匯出成功但無法計算筆數時 Status = Partial、EventCount = $null' {
-            Mock Get-WinEvent -ModuleName ForensiKit -ParameterFilter { $null -ne $Path } { throw 'file is corrupted' }
+        It '匯出成功但 wevtutil gli 失敗時 Status = Partial、EventCount = $null，action log 記錄原因' {
+            Mock Write-FKAction -ModuleName ForensiKit { }
+            $global:FKImplGliMode = 'fail'
             $r = Export-FKEventLog -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -Channels 'Security'
             $r.Status | Should -Be 'Partial'
             $r.EventCount | Should -BeNullOrEmpty
             $r.Path | Should -Exist
+            Should -Invoke Write-FKAction -ModuleName ForensiKit -Scope It -ParameterFilter { $Status -eq 'Partial' -and $Detail -match 'wevtutil gli' -and $Detail -match 'exit 2' }
+        }
+
+        It 'wevtutil gli 的輸出沒有 numberOfLogRecords 時 Status = Partial' {
+            $global:FKImplGliMode = 'garbled'
+            (Export-FKEventLog -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -Channels 'Security').Status | Should -Be 'Partial'
         }
 
         It '略過與失敗的 channel：Path 與 EventCount 為 $null' {
@@ -160,6 +183,7 @@ Describe 'Export-FKEventLog 實作細節（T04）' -Tag 'T04' {
             $lines[0].action | Should -Be 'ExportEventLog'
             $lines[0].status | Should -Be 'OK'
             $lines[0].detail | Should -Match '^wevtutil epl Security .*Security\.evtx "/q:\*\[System\[TimeCreated'
+            $lines[0].detail | Should -Match 'wevtutil gli .*Security\.evtx /lf:true'
             $lines[1].target | Should -Be 'FK-Missing'
             $lines[1].status | Should -Be 'Skipped'
         }

@@ -1,6 +1,6 @@
 ﻿<#
     T09a／T09：Invoke-ForensiKit 實作細節的測試（開發者補充；契約層級的測試見 QA 的 T11 Invoke-ForensiKit.Tests.ps1）。
-    Mock wevtutil、Get-WinEvent、Get-FKConfig、Get-FKArtifact 與管理員檢查，不會在實體電腦上蒐證；
+    Mock wevtutil（epl、gl、gli）、Get-FKConfig、Get-FKArtifact 與管理員檢查，不會在實體電腦上蒐證；
     Export-FKEventLog 與 New-FKManifest 用真的實作串起來。檔案只寫在 TestDrive。
 #>
 
@@ -49,7 +49,6 @@ Describe 'Invoke-ForensiKit 實作細節（T09）' -Tag 'T09a', 'T09' {
 
     BeforeEach {
         Mock wevtutil -ModuleName ForensiKit $script:fakeWevtutil
-        Mock Get-WinEvent -ModuleName ForensiKit -ParameterFilter { $null -ne $Path } { 1..5 | ForEach-Object { [pscustomobject]@{ Id = 4624 } } }
         Mock Test-FKAdmin -ModuleName ForensiKit { $true }
         Mock Get-FKConfig -ModuleName ForensiKit {
             [pscustomobject]@{
