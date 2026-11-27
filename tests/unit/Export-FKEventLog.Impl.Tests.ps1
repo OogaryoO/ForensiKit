@@ -1,6 +1,7 @@
 ﻿<#
     T04：Export-FKEventLog 實作細節的測試（開發者補充；契約層級的測試見 QA 的 T11 Export-FKEventLog.Tests.ps1）。
-    wevtutil（epl、gl、gli）以 Mock 取代，不碰真實事件記錄；Get-WinEvent 也 Mock 掉並確認不再用於計數。檔案只寫在 TestDrive。
+    wevtutil（epl、gl、gli）以 Mock 取代，不碰真實事件記錄；Get-WinEvent 也 Mock 掉並確認不再用於計數。
+    vault 測試把安裝目錄（Get-FKInstallRoot）導到 TestDrive，不讀執行測試電腦上的 C:\ProgramData\ForensiKit。檔案只寫在 TestDrive。
 #>
 
 BeforeAll {
@@ -193,7 +194,33 @@ Describe 'Export-FKEventLog 實作細節（T04）' -Tag 'T04' {
 
         BeforeEach {
             $script:vaultRoot = Join-Path $TestDrive ('vault-' + [guid]::NewGuid().ToString('N'))
-            Mock Get-FKConfig -ModuleName ForensiKit { New-ImplConfig -Channels 'Security' -VaultRoot $script:vaultRoot }
+            # 不帶 -Path 的 Get-FKConfig（預設設定）才 Mock；-Path（讀已安裝的 preservation.json）走真的實作
+            Mock Get-FKConfig -ModuleName ForensiKit -ParameterFilter { [string]::IsNullOrEmpty($Path) } { New-ImplConfig -Channels 'Security' -VaultRoot $script:vaultRoot }
+            # 安裝目錄導到 TestDrive（預設尚未安裝），不讀執行測試電腦上的 C:\ProgramData\ForensiKit
+            $script:installRoot = Join-Path $TestDrive ('install-' + [guid]::NewGuid().ToString('N'))
+            Mock Get-FKInstallRoot -ModuleName ForensiKit { $script:installRoot }
+        }
+
+        It '已安裝常駐保全時，vault 位置以 preservation.json 的 vaultRoot 為準（Get-FKPreservationConfig）' {
+            $custom = Join-Path $TestDrive ('custom-vault-' + [guid]::NewGuid().ToString('N'))
+            New-Item -ItemType Directory -Path $script:installRoot -Force | Out-Null
+            $cfg = Get-Content -LiteralPath (Join-Path $PSScriptRoot '..\..\src\ForensiKit\config\default-profile.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            $cfg.preservation.vaultRoot = $custom
+            [System.IO.File]::WriteAllText((Join-Path $script:installRoot 'preservation.json'), ($cfg | ConvertTo-Json -Depth 10), (New-Object System.Text.UTF8Encoding $false))
+            New-VaultBackup -Root $custom -Channel 'Security' -Names @('20261120T020000Z.evtx')
+            New-VaultBackup -Root $script:vaultRoot -Channel 'Security' -Names @('20261120T020500Z.evtx')
+
+            $r = @(Export-FKEventLog -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -Channels 'Security' -IncludeVault)
+            $sources = @(Get-EplCall | Where-Object { $_ -contains '/lf:true' } | ForEach-Object { $_[1] })
+            $sources | Should -Be @((Join-Path $custom 'Security\20261120T020000Z.evtx'))
+            ($r | Where-Object { $_.Source -eq 'Vault' }).Status | Should -Be 'OK'
+        }
+
+        It '沒有 -IncludeVault 時不讀保全設定' {
+            Mock Get-FKPreservationConfig -ModuleName ForensiKit { throw 'should not be called' }
+            $r = @(Export-FKEventLog -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -Channels 'Security')
+            $r.Count | Should -Be 1
+            Should -Invoke Get-FKPreservationConfig -ModuleName ForensiKit -Times 0 -Exactly -Scope It
         }
 
         It '依備份時間略過一定不含此時段的備份（安全邊界 60 分鐘）' {
@@ -231,7 +258,7 @@ Describe 'Export-FKEventLog 實作細節（T04）' -Tag 'T04' {
         }
 
         It '帶 / 的 channel 在 vault 中用 %4 目錄名稱' {
-            Mock Get-FKConfig -ModuleName ForensiKit { New-ImplConfig -Channels 'Microsoft-Windows-Sysmon/Operational' -VaultRoot $script:vaultRoot }
+            Mock Get-FKConfig -ModuleName ForensiKit -ParameterFilter { [string]::IsNullOrEmpty($Path) } { New-ImplConfig -Channels 'Microsoft-Windows-Sysmon/Operational' -VaultRoot $script:vaultRoot }
             New-VaultBackup -Root $script:vaultRoot -Channel 'Microsoft-Windows-Sysmon%4Operational' -Names @('20261120T020000Z.evtx')
             $r = @(Export-FKEventLog -StartUtc $script:start -EndUtc $script:end -Destination $script:dest -IncludeVault)
             $v = $r | Where-Object { $_.Source -eq 'Vault' }
