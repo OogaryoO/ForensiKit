@@ -41,7 +41,9 @@
         要匯出的 channel。省略時使用 Get-FKConfig 設定中的 channels。
 
     .PARAMETER IncludeVault
-        同時從 vault（Get-FKConfig 的 preservation.vaultRoot）匯出同一時段的事件，用於 log 已被清除或覆寫的情況。
+        同時從 vault 匯出同一時段的事件，用於 log 已被清除或覆寫的情況。
+        vault 位置：已安裝常駐保全時為 <安裝目錄>\preservation.json 的 preservation.vaultRoot，否則為 Get-FKConfig 的預設值
+        （內部函式 Get-FKPreservationConfig）。
 
     .OUTPUTS
         每個 channel 一筆 [pscustomobject]：Channel、Source（'Live' 或 'Vault'）、Path、EventCount、Status。
@@ -170,12 +172,8 @@
         throw ("StartUtc（{0}）晚於 EndUtc（{1}）。" -f (ConvertTo-FKIsoUtc -Date $StartUtc), (ConvertTo-FKIsoUtc -Date $EndUtc))
     }
 
-    $config = $null
-    if (-not $PSBoundParameters.ContainsKey('Channels') -or $IncludeVault) {
-        $config = Get-FKConfig
-    }
     if (-not $PSBoundParameters.ContainsKey('Channels')) {
-        $Channels = @($config.channels | ForEach-Object { [string]$_ })
+        $Channels = @((Get-FKConfig).channels | ForEach-Object { [string]$_ })
     }
     $Channels = @($Channels | Select-Object -Unique)
 
@@ -212,7 +210,9 @@
 
     # ---- Vault ----
 
-    $vaultRoot = [string]$config.preservation.vaultRoot
+    # vault 位置以已安裝的 preservation.json 為準（Install-FKPreservation -ConfigPath 可能自訂 vaultRoot），
+    # 一律透過 Get-FKPreservationConfig 取得（docs/ARCHITECTURE.md 第 5 節）
+    $vaultRoot = [string](Get-FKPreservationConfig).preservation.vaultRoot
     $vaultOutRoot = Join-Path $Destination 'vault'
     $margin = [TimeSpan]::FromMinutes(60)
     $nameFormat = "yyyyMMdd'T'HHmmss'Z'"
